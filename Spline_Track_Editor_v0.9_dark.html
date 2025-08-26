@@ -1,0 +1,173 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Spline_Track_Editor</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{--bg:#0e1116;--panel:#151b26;--soft:#1f2836;--line:#283449;--fg:#e8eef6;--mut:#9aa7b4;--accent:#ffd36b;}
+  *{box-sizing:border-box} html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,Segoe UI,Arial}
+  .app{display:grid;grid-template-columns:1fr 360px;gap:12px;height:100%;padding:12px}
+  .panel{background:var(--panel);border:1px solid var(--soft);border-radius:12px;min-height:0;display:grid;grid-template-rows:auto 1fr auto}
+  .hdr{padding:12px 16px;border-bottom:1px solid var(--soft);font-weight:700}
+  .footer{padding:8px 16px;color:var(--mut)}
+  .section{padding:12px 16px;border-bottom:1px solid var(--soft)}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .col{display:flex;flex-direction:column;gap:8px}
+  button{padding:7px 10px;border-radius:9px;border:1px solid var(--line);background:#101722;color:var(--fg);cursor:pointer}
+  button:hover{border-color:#6b7a91}
+  input[type=number],select{width:160px;padding:7px;border-radius:9px;border:1px solid var(--line);background:#0b1118;color:var(--fg)}
+  input[type=range]{width:160px}
+  textarea{width:100%;height:360px;border:1px solid var(--line);border-radius:8px;background:#0b1118;color:var(--fg);padding:8px;font:12px/1.4 ui-monospace,Consolas,monospace}
+  .list{height:440px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:6px;background:#0f151c}
+  .item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px;border-radius:8px}
+  .item.active{background:#0f1922;border:1px solid #2b3a49}
+  .tag{font-size:10px;color:#c6d1de;background:#253244;border:1px solid #2f3e52;border-radius:6px;padding:2px 6px;margin-left:8px}
+  .mut{color:var(--mut);font-size:12px}
+  .placeholder{padding:8px;color:var(--mut)}
+  .gridMain{display:grid;grid-template-rows:auto 1fr;gap:0}
+  .toolbar{padding:10px 16px;border-bottom:1px solid var(--soft);display:flex;gap:8px;align-items:center}
+  .work{display:grid;grid-template-columns:1fr 320px;gap:0;min-height:0}
+  .canvasWrap{position:relative;min-height:0;overflow:auto;display:flex;align-items:center;justify-content:center;border-right:1px solid var(--soft)}
+  canvas{display:block;background:#0b0f14;border-radius:12px}
+  .menu{position:absolute;min-width:200px;background:#0f151b;border:1px solid var(--soft);border-radius:8px;box-shadow:0 12px 30px rgba(0,0,0,.35);display:none;z-index:50}
+  .menu button{display:block;width:100%;text-align:left;background:transparent;border:0;border-bottom:1px solid #1b2430;padding:8px 10px;color:var(--fg)}
+  .menu button:last-child{border-bottom:0}
+  .menu button:hover{background:#14202b}
+  .dock{display:grid;grid-template-rows:auto auto auto;padding:8px 12px;gap:4px;align-content:start;}
+  #scv{display:block;width:100%;height:180px;background:#0c1116;border-radius:6px;border:1px solid #1d2430}
+  .seg{padding:8px;border:1px dashed #2a374a;border-radius:8px}
+  /* 让按钮行更紧凑 */
+  .sc-buttons { margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="panel" style="grid-template-rows:auto 1fr auto">
+    <div class="hdr">Spline Track Editor</div>
+    <div class="gridMain">
+      <div class="toolbar">
+        <button id="btnBG">Background…</button>
+        <input id="bgFile" type="file" accept="image/*" style="display:none">
+        <button id="btnImport">Import JSON…</button>
+        <button id="btnPaste">Paste JSON</button> 
+        <input id="pasteInline" type="text" placeholder="Paste JSON here" style="margin-left:8px; width:420px; padding:6px 8px; border:1px solid #2b3546; border-radius:6px; background:#0e141d; color:#d7dde7;" />
+        <button id="btnUndo" style="margin-left:8px">Undo</button>
+        <button id="btnClear">Clear</button>
+        
+        <!-- Grid 开关 -->
+        <label class="mut" style="margin-left:12px">
+          <input id="gridToggle" type="checkbox" checked> Grid
+        </label>
+        <span class="mut" id="modeTip" style="margin-left:auto"></span>
+      </div>
+      <div class="work">
+        <div class="canvasWrap" id="canvasWrap">
+          <canvas id="cv" width="960" height="540"></canvas>
+          <div id="ctxMenu" class="menu"></div>
+        </div>
+        <div class="dock">
+          <div class="row" style="justify-content:space-between;align-items:center">
+            <div style="font-weight:600">Speed Curve</div>
+            <label><input type="checkbox" id="scEnable"> Use</label>
+          </div>
+          <canvas id="scv" width="296" height="180"></canvas>
+          <div class="col sc-buttons">
+            <div class="row">
+              <button id="scLinear">Linear</button>
+              <button id="scEaseIn">EaseIn</button>
+              <button id="scEaseOut">EaseOut</button>
+              <button id="scEaseInOut">InOut</button>
+            </div>
+            <div class="row seg">
+              <label><input type="checkbox" id="scSmooth"> Smooth（Monotone）</label>
+            </div>
+          </div>
+          
+          <!-- 将 New Spline 面板移到这里 -->
+          <div class="section">
+            <div class="row" style="margin-bottom:8px">
+              <button id="btnNewSpline">New Spline</button>
+              <button id="btnNewStatic">New Static</button>
+              <button id="btnDelSpline">Delete</button>
+            </div>
+            <div id="list" class="list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="footer">Status: <span id="status">Ready</span></div>
+  </div>
+
+  <div class="panel" style="grid-template-rows:auto auto auto auto 1fr auto">
+    
+
+    <div class="section">
+      <div class="col">
+        <div class="row"><span>Canvas Width</span><input id="w" type="number" value="960" min="64" max="4096"></div>
+        <div class="row"><span>Canvas Height</span><input id="h" type="number" value="540" min="64" max="4096"></div>
+      </div>
+    </div>
+
+<div class="section">
+      <div class="row">
+        
+        <button id="applyRes" style="margin-left:8px">Apply Resolution</button>
+        <button id="fitWork">Fit to Work</button>
+      
+      </div>
+    </div>
+    <div class="section">
+      <div class="col">
+        <div class="row"><span>Interpolation</span>
+          <select id="interp"><option value="cardinal" selected>Cardinal</option><option value="catmull">Catmull-Rom</option></select>
+        </div>
+        <div class="row"><span>Tension</span>
+          <input id="tension" type="range" min="0" max="1" step="0.01" value="0.5">
+          <span id="tensionNA" class="mut" style="display:none">N/A</span>
+        </div>
+        <div class="row"><span>Sampling</span>
+          <select id="sampling">
+            <option value="time" selected>time</option>
+            <option value="path">path</option>
+            <option value="speed">speed</option>
+            <option value="controlpoints">controlpoints</option>
+          </select>
+          <span>Points</span><input id="nSample" type="number" value="121" min="2" max="2000">
+        </div>
+        <div class="row">
+          <label><input type="checkbox" id="showHandles" checked> Handles</label>
+          <label><input type="checkbox" id="showSamples"> Sample points</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="col">
+        <div style="font-weight:600;margin-bottom:6px">Circle Mode（camera assist）</div>
+        <div class="row">
+          <button id="btnCircleCenter">Place Center</button>
+          <button id="btnCircleAdd">Add Circle Point</button>
+          <button id="btnCircleClear">Clear Circle</button>
+        </div>
+        <div class="row">
+          <span>Radius</span>
+          <input id="circleRadius" type="range" min="1" max="4000" value="60" disabled>
+          <label><input id="circleRecord" type="checkbox"> Record on drag</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="row">
+        <button id="btnExportTracks">Export JSON (tracks)</button>
+        <button id="btnCopy">Copy</button>
+      </div>
+      <textarea id="io" placeholder="Export preview appears here"></textarea>
+    </div>
+  </div>
+</div>
+
+<script src="app_en.js"></script>
+</body>
+</html>
